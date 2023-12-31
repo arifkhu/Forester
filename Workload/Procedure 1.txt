@@ -1,140 +1,153 @@
-############################
-######Procedure 1#########
-############################
+###################
+####Procedure 1#####
+########################
+### Specific parameter values are used for the experiments. It can be changed based on one requirement.
+#######################################################################################################
 
-create or replace procedure wp_11(in yearInfo integer)
-  as begin
-  	declare _year integer;
-	
-  	Declare year_total table(
-								paid decimal(7,2), 
-								customer_id char(16), 
-								customer_first_name char(20), 
-								customer_last_name char(30), 
-								year integer,
-								year_total decimal(7,2), 
-								sale_type varchar(1)
-								);
-  	_year := :yearInfo;
-  	
-	vv1 = 	select 
-					c_customer_id, 
-					c_first_name, 
-					c_last_name, 
-					c_customer_sk 
-			from 
-					customer;
-  	
-	vv2 = 	select 
-					ss_net_paid, 
-					ss_sold_date_sk, 
-					ss_customer_sk 
-			from 
-					store_sales;
-	
-  	vv3 = 	select 
-					d_date_sk, 
-					d_year 
-			from 
-					date_dim ;
-	
-  	vv4 = 	select 
-					ws_net_paid, 
-					ws_bill_customer_sk, 
-					ws_sold_date_sk 
-			from 
-					web_sales;
-	
-  	ww1 = 	select 
-					c_customer_id, 
-					c_first_name, 
-					c_last_name, 
-					c_customer_sk, 
-					ss_sold_date_sk, 
-					ss_net_paid 
-			from 
-					:vv1, 
-					:vv2 
-			where 
-					c_customer_sk = ss_customer_sk ;
-	
-  	ww2 = 	select 
-					c_customer_id,
-					c_first_name, 
-					c_last_name, 
-					ws_net_paid, 
-					ws_sold_date_sk 
-			from 
-					:vv1,					
-					:vv4 
-			where 
-					c_customer_sk = ws_bill_customer_sk ;
-	
-  	while (_year < 2100) DO
-  		v0 =  
-			select 
-					ss_net_paid paid, 
-					c_customer_id customer_id, 
-					c_first_name customer_first_name, 
-					c_last_name customer_last_name, 
-					d_year as year, 
-					min(ss_net_paid) year_total, 's' sale_type 
-			from 
-					:ww1, 
-					:vv3 
-			where 
-					ss_sold_date_sk = d_date_sk 
-					and d_year in (:_year,:_year+1) 
-			group by 
-					ss_net_paid, 
-					c_customer_id, 
-					c_first_name, 
-					c_last_name, 
-					d_year;
-  		
-		v1 =  
-			select 
-					ws_net_paid paid, 
-					c_customer_id customer_id, 
-					c_first_name customer_first_name, 
-					c_last_name customer_last_name, 
-					d_year as year, 
-					min(ws_net_paid) year_total, 'w' sale_type 
-			from 
-					:ww2 ,
-					:vv3 
-			where 
-					ws_sold_date_sk = d_date_sk 
-					and d_year in (:_year,:_year+1) 
-			group by 
-					ws_net_paid, 
-					c_customer_id, 
-					c_first_name, 
-					c_last_name, 
-					d_year;
-  		
-		year_total = 
-			select 
-					* 
-			from 
-					:year_total 
-					UNION ALL (
-								select 
-										* 
-								from 
-										:v0 
-								union all 
-								select 
-										* 
-								from 
-										:v1);
-  		
-		_year = :_year + 1;
-  	
-	end while;
-  	
-	select 
-			avg(t_s_firstyear.paid) paid 
-	from 
-			:year_total t_s_firstyear;
-  end;
+CREATE OR REPLACE PROCEDURE wp_1()
+   AS BEGIN
+   
+   DECLARE i INT := 2000;
+   
+   DECLARE k INT := 2100;
+   
+   ws = 
+		select 
+				d_year AS ws_sold_year, 
+				ws_item_sk,
+				ws_bill_customer_sk ws_customer_sk,
+				sum(ws_quantity) ws_qty,
+				sum(ws_wholesale_cost) ws_wc,
+				sum(ws_sales_price) ws_sp 
+		from 	
+				web_sales 
+					left join web_returns on wr_order_number=ws_order_number 
+						and ws_item_sk=wr_item_sk 
+					join date_dim on ws_sold_date_sk = d_date_sk 
+		where 
+				wr_order_number is null 
+		group by 
+				d_year, 
+				ws_item_sk,
+				ws_bill_customer_sk;
+   
+   cs = 
+		select 
+				d_year AS cs_sold_year, 
+				cs_item_sk,
+				cs_bill_customer_sk cs_customer_sk,
+				sum(cs_quantity) cs_qty, 
+				sum(cs_wholesale_cost) cs_wc,
+				sum(cs_sales_price) cs_sp 
+		from 
+				catalog_sales 
+					left join catalog_returns on cr_order_number=cs_order_number 
+						and cs_item_sk=cr_item_sk 
+					join date_dim on cs_sold_date_sk = d_date_sk 
+		where 
+				cr_order_number is null 
+		group by 
+				d_year, 
+				cs_item_sk, 
+				cs_bill_customer_sk;
+   
+   ss = 
+		select 
+				d_year AS ss_sold_year, 
+				ss_item_sk,ss_customer_sk, 
+				sum(ss_quantity) ss_qty, 
+				sum(ss_wholesale_cost) ss_wc,
+				sum(ss_sales_price) ss_sp 
+		from 
+				store_sales 
+					left join store_returns on sr_ticket_number=ss_ticket_number 
+						and ss_item_sk=sr_item_sk 
+					join date_dim on ss_sold_date_sk = d_date_sk 
+		where 
+				sr_ticket_number is null 
+		group by 
+				d_year, 
+				ss_item_sk, 
+				ss_customer_sk;
+   
+   aggItems = 
+		select 
+				ss_sold_year, 
+				ss_item_sk, 
+				ss_customer_sk,
+				round(ss_qty/(coalesce(ws_qty,0)+coalesce(cs_qty,0)),2) ratio,
+				ss_qty store_qty, 
+				ss_wc store_wholesale_cost, 
+				ss_sp store_sales_price,
+				coalesce(ws_qty,0)+coalesce(cs_qty,0) other_chan_qty,
+				coalesce(ws_wc,0)+coalesce(cs_wc,0) other_chan_wholesale_cost,
+				coalesce(ws_sp,0)+coalesce(cs_sp,0) other_chan_sales_price 
+		from 
+				:ss 
+					left join :ws on (ws_sold_year=ss_sold_year 
+						and ws_item_sk=ss_item_sk and ws_customer_sk=ss_customer_sk) 
+					left join :cs on (cs_sold_year=ss_sold_year 
+						and cs_item_sk=ss_item_sk and cs_customer_sk=ss_customer_sk) 
+		where 
+				(coalesce(ws_qty,0)>0 or coalesce(cs_qty, 0)>0) 
+				and ss_sold_year=:i 
+		order by 
+				ss_sold_year, 
+				ss_item_sk, 
+				ss_customer_sk, 
+				ss_qty desc, ss_wc desc, 
+				ss_sp desc, 
+				other_chan_qty, 
+				other_chan_wholesale_cost,
+				other_chan_sales_price,ratio;
+   
+   WHILE :i < :k DO
+   
+		aggItems = 
+				SELECT 
+						* 
+				FROM 
+						:aggItems 
+				UNION ALL (
+						select 
+								ss_sold_year, 
+								ss_item_sk, 
+								ss_customer_sk,
+								round(ss_qty/(coalesce(ws_qty,0)+coalesce(cs_qty,0)),2) ratio,
+								ss_qty store_qty, 
+								ss_wc store_wholesale_cost, 
+								ss_sp store_sales_price,coalesce(ws_qty,0)+coalesce(cs_qty,0) other_chan_qty,
+								coalesce(ws_wc,0)+coalesce(cs_wc,0) other_chan_wholesale_cost,
+								coalesce(ws_sp,0)+coalesce(cs_sp,0) other_chan_sales_price 
+						from 
+								:ss 
+									left join :ws on (ws_sold_year=ss_sold_year 
+										and ws_item_sk=ss_item_sk and ws_customer_sk=ss_customer_sk) 
+									left join :cs on (cs_sold_year=ss_sold_year 
+										and cs_item_sk=ss_item_sk and cs_customer_sk=ss_customer_sk) 
+						where 
+								(coalesce(ws_qty,0)>0 or coalesce(cs_qty, 0)>0) 
+								and ss_sold_year between 1900 
+								and :i 
+						order by 
+								ss_sold_year, 
+								ss_item_sk, 
+								ss_customer_sk, 
+								ss_qty desc, 
+								ss_wc desc, 
+								ss_sp desc, 
+								other_chan_qty, 
+								other_chan_wholesale_cost,
+								other_chan_sales_price,
+								ratio);
+		
+		i =:i + 1;
+   
+   END WHILE;
+   
+	SELECT 
+			avg(store_sales_price) 
+	FROM 
+			:aggItems;
+   
+   END;
