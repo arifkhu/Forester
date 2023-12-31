@@ -1,0 +1,210 @@
+#######################
+#### Procedure 7 ########
+#####################
+### Specific parameter values are used for the experiments. It can be changed based on one requirement.
+#######################################################################################################
+
+create or replace procedure wp_7(in year_Info integer)
+	AS BEGIN    
+	
+	declar e _year integer;
+	_year := :year_Info; 
+	
+	vv1 = 
+			select 
+					c_customer_id, 
+					c_first_name, 
+					c_last_name, 
+					c_preferred_cust_flag, 
+					c_birth_country, 
+					c_login, 
+					c_email_address, 
+					c_customer_sk 
+			from 
+					customer; 
+	
+	vv2 = 
+			select 
+					d_year, 
+					d_date_sk 
+			from 
+					date_dim; 
+	
+	vv3 = 
+			select 
+					ss_ext_list_price, 
+					ss_ext_wholesale_cost, 
+					ss_ext_discount_amt, 
+					ss_ext_sales_price, 
+					ss_sold_date_sk, 
+					ss_customer_sk 
+			from 
+					store_sales; 
+	
+	vv4 = 
+			select 
+					cs_ext_list_price,
+					cs_ext_wholesale_cost,
+					cs_ext_discount_amt,
+					cs_ext_sales_price,
+					cs_sold_date_sk,
+					cs_bill_customer_sk 
+			from 
+					catalog_sales;
+	
+	v1 = 
+			select 
+					ss_ext_list_price price, 
+					c_customer_id customer_id, 
+					c_first_name customer_first_name, 
+					c_last_name customer_last_name, 
+					c_preferred_cust_flag customer_preferred_cust_flag, 
+					c_birth_country customer_birth_country, 
+					c_login customer_login, 
+					c_email_address customer_email_address, 
+					d_year dyear, 
+					sum(((ss_ext_list_price-ss_ext_wholesale_cost-ss_ext_discount_amt)+ss_ext_sales_price)/2) year_total, 
+					's' sale_typef 
+			from 
+					:vv1, 
+					:vv2, 
+					:vv3 
+			where 
+					c_customer_sk = ss_customer_sk 
+					and ss_sold_date_sk = d_date_sk 
+			group by 
+					c_customer_id, 
+					c_first_name, 					
+					c_last_name, 
+					c_preferred_cust_flag, 
+					c_birth_country, 
+					c_login, 
+					c_email_address, 
+					d_year, 
+					ss_ext_list_price; 
+	
+	v2 =  
+			select 
+					cs_ext_list_price price, 
+					c_customer_id customer_id, 
+					c_first_name customer_first_name, 
+					c_last_name customer_last_name, 
+					c_preferred_cust_flag customer_preferred_cust_flag, 
+					c_birth_country customer_birth_country, 
+					c_login customer_login, 
+					c_email_address customer_email_address, 
+					d_year dyear, 
+					sum((((cs_ext_list_price-cs_ext_wholesale_cost-cs_ext_discount_amt)+cs_ext_sales_price)/2) ) year_total, 
+					'c' sale_type 
+			from 
+					:vv1, 
+					:vv4, 
+					:vv2 
+			where 
+					c_customer_sk = cs_bill_customer_sk
+					and cs_sold_date_sk = d_date_sk 
+			group by 
+					c_customer_id, 
+					c_first_name, 
+					c_last_name, 
+					c_preferred_cust_flag, 
+					c_birth_country, 
+					c_login, c_email_address, 
+					d_year, 
+					cs_ext_list_price; 
+	
+	year_total =
+			select 
+					* 
+			from 
+					:v1 
+			
+			union all 
+			
+			select 
+					* 
+			from 
+					:v2; 
+	
+	v4 = 
+			select 
+					t_s_secyear.price, 
+					t_s_secyear.customer_id, 
+					t_s_secyear.customer_first_name, 
+					t_s_secyear.customer_last_name, 
+					t_s_secyear.customer_preferred_cust_flag, 
+					t_s_firstyear.dyear dsf, 
+					t_s_secyear.dyear dss, 
+					t_c_firstyear.dyear dcf, 
+					t_c_secyear.dyear dcs, 
+					t_w_firstyear.dyear dwf, 
+					t_w_secyear.dyear dws 
+			from 
+					:year_total t_s_firstyear, 
+					:year_total t_s_secyear, 
+					:year_total t_c_firstyear, 
+					:year_total t_c_secyear, 
+					:year_total t_w_firstyear, 
+					:year_total t_w_secyear 
+			where 
+					t_s_secyear.customer_id = t_s_firstyear.customer_id 
+					and t_s_firstyear.customer_id = t_c_secyear.customer_id 
+					and t_s_firstyear.customer_id = t_c_firstyear.customer_id 
+					and t_s_firstyear.customer_id = t_w_firstyear.customer_id 
+					and t_s_firstyear.customer_id = t_w_secyear.customer_id 
+					and t_s_firstyear.year_total > 0 
+					and t_c_firstyear.year_total > 0 
+					and t_w_firstyear.year_total > 0 
+					and 
+						case 
+							when 
+								t_c_firstyear.year_total > 0 
+							then 
+								t_c_secyear.year_total / t_c_firstyear.year_total else null end > 
+						case 
+							when 
+								t_s_firstyear.year_total > 0 
+							then 
+								t_s_secyear.year_total / t_s_firstyear.year_total else null end 
+					and 
+						case 
+							when 
+								t_c_firstyear.year_total > 0 
+							then 
+								t_c_secyear.year_total / t_c_firstyear.year_total else null end > 
+						case 
+							when 
+								t_w_firstyear.year_total > 0 
+							then 
+								t_w_secyear.year_total / t_w_firstyear.year_total else null end 
+			order by 
+					t_s_secyear.customer_id, 
+					t_s_secyear.customer_first_name, 
+					t_s_secyear.customer_last_name, 
+					t_s_secyear.customer_preferred_cust_flag; 
+	
+	WHILE (:_year < 2002) DO 
+		
+		agg= 
+				select 
+						TOP 100000000 customer_id, price, :_year year 
+				from 
+						:v4 
+				where  
+						dsf =  :_year 
+						and dss  = :_year +1 
+						and dcf = :_year 
+						and dcs = :_year + 1 
+						and dwf = :_year 
+						and dws = :_year + 1;
+		_
+		year = :_year + 3;
+	
+	end while; 
+	
+	select 
+			avg(price) price 
+	from 
+			:agg; 
+	
+	end;
