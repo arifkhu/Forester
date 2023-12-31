@@ -1,0 +1,124 @@
+#########################
+#### Procedure 12 #####
+#########################
+### Specific parameter values are used for the experiments. It can be changed based on one requirement.
+#######################################################################################################
+
+CREATE OR REPLACE PROCEDURE wp_12() AS BEGIN
+ 
+ DECLARE a INT := 1900;
+ 
+ DECLARE b INT := 2000;
+ 
+ DECLARE x INT := 4970;
+ 
+ DECLARE y INT := 4977;
+ 
+ Declare v2 table(
+					d_year integer,
+					brand_id integer, 
+					brand varchar(50), 
+					sum_agg decimal(18,2)
+				);
+ 
+ Declare v4 table(
+					c_customer_sk integer, 
+					d_year integer, 
+					cnt BIGINT
+				);
+ 
+ v2 = 
+		select 
+				dt.d_year,
+				i.i_brand_id brand_id, 
+				i.i_brand brand,
+				sum(ss_ext_sales_price) sum_agg 
+		from 
+				date_dim dt, 
+				store_sales vs, 
+				item i 
+		where 
+				dt.d_date_sk = vs.ss_sold_date_sk 
+				and vs.ss_item_sk = i.i_item_sk 
+		group by 
+				dt.d_year,
+				i.i_brand,
+				i.i_brand_id 
+		order by 
+				dt.d_year,
+				sum_agg desc,
+				brand_id;
+ 
+ v4 = 
+		select 
+				c.c_customer_sk, 
+				d_year, 
+				count(*) cnt 
+		from 
+				customer_address a, 
+				customer c, 
+				store_sales s, 
+				date_dim d, 
+				item i 
+		where 
+				a.ca_address_sk = c.c_current_addr_sk 
+				and c.c_customer_sk = s.ss_customer_sk 
+				and s.ss_sold_date_sk = d.d_date_sk 
+				and s.ss_item_sk = i.i_item_sk 
+				and i.i_current_price > 1.2 * (
+												select 
+														avg(j.i_current_price) 
+												from 
+														item j 
+												where 
+														j.i_category = i.i_category
+												) 
+		GROUP BY 
+				c.c_customer_sk, 
+				d_year;
+ 
+ v5 = 
+		select 
+				:v4.c_customer_sk, 
+				:v4.d_year 
+		from 
+				:v2, 
+				:v4 
+		WHERE 
+				:v2.d_year=:v4.d_year;
+ 
+ v6 = 
+		SELECT 
+				* 
+		FROM 
+				:v5 
+		WHERE 
+				c_customer_sk = :x;
+ 
+ WHILE :x < :y DO
+      
+	  v6 = 
+			select 
+					* 
+			from 
+					:v6 
+			
+			UNION ALL (
+						SELECT 
+								* 
+						FROM 
+								:v5 
+						WHERE 
+								c_customer_sk = :x
+						);
+      
+	  x =:x + 1;
+ 
+ END WHILE;
+ 
+ select 
+		avg(*) 
+ from 
+		:v6;
+
+END;
