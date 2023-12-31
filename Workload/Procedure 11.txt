@@ -1,0 +1,142 @@
+############################
+######Procedure 11#########
+############################
+### Specific parameter values are used for the experiments. It can be changed based on one requirement.
+#######################################################################################################
+
+create or replace procedure wp_11(in yearInfo integer)
+  as begin
+  	declare _year integer;
+	
+  	Declare year_total table(
+								paid decimal(7,2), 
+								customer_id char(16), 
+								customer_first_name char(20), 
+								customer_last_name char(30), 
+								year integer,
+								year_total decimal(7,2), 
+								sale_type varchar(1)
+								);
+  	_year := :yearInfo;
+  	
+	vv1 = 	select 
+					c_customer_id, 
+					c_first_name, 
+					c_last_name, 
+					c_customer_sk 
+			from 
+					customer;
+  	
+	vv2 = 	select 
+					ss_net_paid, 
+					ss_sold_date_sk, 
+					ss_customer_sk 
+			from 
+					store_sales;
+	
+  	vv3 = 	select 
+					d_date_sk, 
+					d_year 
+			from 
+					date_dim ;
+	
+  	vv4 = 	select 
+					ws_net_paid, 
+					ws_bill_customer_sk, 
+					ws_sold_date_sk 
+			from 
+					web_sales;
+	
+  	ww1 = 	select 
+					c_customer_id, 
+					c_first_name, 
+					c_last_name, 
+					c_customer_sk, 
+					ss_sold_date_sk, 
+					ss_net_paid 
+			from 
+					:vv1, 
+					:vv2 
+			where 
+					c_customer_sk = ss_customer_sk ;
+	
+  	ww2 = 	select 
+					c_customer_id,
+					c_first_name, 
+					c_last_name, 
+					ws_net_paid, 
+					ws_sold_date_sk 
+			from 
+					:vv1,					
+					:vv4 
+			where 
+					c_customer_sk = ws_bill_customer_sk ;
+	
+  	while (_year < 2100) DO
+  		v0 =  
+			select 
+					ss_net_paid paid, 
+					c_customer_id customer_id, 
+					c_first_name customer_first_name, 
+					c_last_name customer_last_name, 
+					d_year as year, 
+					min(ss_net_paid) year_total, 's' sale_type 
+			from 
+					:ww1, 
+					:vv3 
+			where 
+					ss_sold_date_sk = d_date_sk 
+					and d_year in (:_year,:_year+1) 
+			group by 
+					ss_net_paid, 
+					c_customer_id, 
+					c_first_name, 
+					c_last_name, 
+					d_year;
+  		
+		v1 =  
+			select 
+					ws_net_paid paid, 
+					c_customer_id customer_id, 
+					c_first_name customer_first_name, 
+					c_last_name customer_last_name, 
+					d_year as year, 
+					min(ws_net_paid) year_total, 'w' sale_type 
+			from 
+					:ww2 ,
+					:vv3 
+			where 
+					ws_sold_date_sk = d_date_sk 
+					and d_year in (:_year,:_year+1) 
+			group by 
+					ws_net_paid, 
+					c_customer_id, 
+					c_first_name, 
+					c_last_name, 
+					d_year;
+  		
+		year_total = 
+			select 
+					* 
+			from 
+					:year_total 
+					UNION ALL (
+								select 
+										* 
+								from 
+										:v0 
+								union all 
+								select 
+										* 
+								from 
+										:v1);
+  		
+		_year = :_year + 1;
+  	
+	end while;
+  	
+	select 
+			avg(t_s_firstyear.paid) paid 
+	from 
+			:year_total t_s_firstyear;
+  end;
