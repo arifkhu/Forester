@@ -1,0 +1,130 @@
+#########################
+#### Procedure 13 #####
+#########################
+### Specific parameter values are used for the experiments. It can be changed based on one requirement.
+#######################################################################################################
+
+CREATE OR REPLACE PROCEDURE wp_13() 
+AS BEGIN
+ 
+ DECLARE a INT := 1700;
+ 
+ DECLARE b INT := 2000;
+ 
+ DECLARE x INT := 4970;
+ 
+ DECLARE y INT := 4977;
+ 
+ v2 = 
+		select 
+				top 1000000 d_year AS ws_sold_year, 
+				ws_item_sk,ws_bill_customer_sk ws_customer_sk,
+				sum(ws_quantity) ws_qty,
+				sum(ws_wholesale_cost) ws_wc,
+				sum(ws_sales_price) ws_sp 
+		from 
+				web_sales 
+						left join web_returns on 
+												wr_order_number=ws_order_number 
+												and ws_item_sk=wr_item_sk 
+						join date_dim on 
+												ws_sold_date_sk = d_date_sk 
+		where 
+				wr_order_number is null 
+		group by 
+				d_year, 
+				ws_item_sk,
+				ws_bill_customer_sk 
+		order by 
+				d_year desc, 
+				ws_item_sk;
+ 
+ v4 = 
+		select 
+				top 10000 c.c_customer_sk, 
+				d_year, 
+				count(*) cnt 
+		from 
+				customer_address a, 
+				customer c, 
+				store_sales s, 
+				date_dim d, 
+				item i 
+		where 
+				a.ca_address_sk = c.c_current_addr_sk 
+				and c.c_customer_sk = s.ss_customer_sk 
+				and s.ss_sold_date_sk = d.d_date_sk 
+				and s.ss_item_sk = i.i_item_sk 
+				and i.i_current_price > 1.2 * (
+												select 
+														avg(j.i_current_price) 
+												from 
+														item j 
+												where 
+														j.i_category = i.i_category
+											) 
+		GROUP BY 
+				c.c_customer_sk, 
+				d_year;
+ 
+ v5 = 
+		select 
+				* 
+		from 
+				:v2 
+		WHERE 
+				ws_sold_year between :a and :b;
+ 
+ v6 = 
+		select 
+				* 
+		from 
+				:v4 
+		WHERE 
+				d_year between :a and :b;
+ 
+ v7 = 
+		select 
+				:v6.c_customer_sk, 
+				:v6.d_year 
+		from 
+				:v6, 
+				:v5 
+		WHERE 
+				:v6.d_year = :v5.ws_sold_year;
+ 
+ v8 = 
+		SELECT 
+				* 
+		FROM 
+				:v7 
+		WHERE 
+				c_customer_sk = :x;
+ 
+ WHILE :x < :y DO
+      
+	  v8 = 
+			select 
+					* 
+			from 
+					:v8 
+			
+			UNION ALL (
+						SELECT 
+								* 
+						FROM 
+								:v7 
+						WHERE 
+								c_customer_sk = :x
+						);
+      
+	  x =:x + 1;
+ 
+ END WHILE;
+ 
+ select 
+		count(*) 
+ from 
+		:v8;
+
+END;
